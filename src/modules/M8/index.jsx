@@ -1,0 +1,1189 @@
+﻿import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion } from 'framer-motion'
+import gsap from 'gsap'
+import useI18n from '../../i18n/useI18n'
+import './index.css'
+
+const FLOW_STEPS = [
+  { index: '01', code: 'OBSERVE', id: 'm8-compare', label: '识别有效信息' },
+  { index: '02', code: 'CLASSIFY', id: 'm8-practice', label: '完成分类练习' },
+  { index: '03', code: 'REPORT', id: 'm8-report', label: '浏览观测样本' },
+  { index: '04', code: 'REVIEW', id: 'm8-community', label: '查看社区补充' },
+]
+
+const PRACTICE_OPTIONS = [
+  ['debris', '太空垃圾'],
+  ['meteor', '流星'],
+  ['satellite', '卫星残骸'],
+]
+
+const GUIDE_STEPS = [
+  {
+    type: 'debris',
+    action: '向下拖拽',
+    image: '/m8-game/reentry-fragments.png',
+    title: '太空垃圾',
+    clue: '多个亮点同向、速度较慢、持续碎裂。',
+    reportHint: '向下拖入太空垃圾背包。',
+    vector: { x: 0, y: 1 },
+  },
+  {
+    type: 'meteor',
+    action: '向左拖拽',
+    image: '/m8-game/meteor-split.png',
+    title: '流星',
+    clue: '单条亮线，时间很短，可能突然爆闪。',
+    reportHint: '向左拖拽完成判断。',
+    vector: { x: -1, y: 0 },
+  },
+  {
+    type: 'satellite',
+    action: '向右拖拽',
+    image: '/m8-game/satellite-pass.png',
+    title: '卫星残骸',
+    clue: '主体仍可辨认，沿轨道方向稳定移动。',
+    reportHint: '向右拖拽完成判断。',
+    vector: { x: 1, y: 0 },
+  },
+]
+
+const DEBRIS_SLOT = { type: 'debris', vector: { x: 0, y: 1 } }
+
+const REQUIRED_FIELDS = [
+  { id: 'time', label: '时间', hint: '例如 2026-05-02 21:37，尽量精确到分钟。', hintLines: ['2026-05-02 21:37', '精确到分钟'] },
+  { id: 'location', label: '地点', hint: '城市、区县、经纬度或可复现的观测位置。', hintLines: ['城市 / 区县', '经纬度位置'] },
+  { id: 'direction', label: '出现方位', hint: '出现和消失的大致方位，如西南到东北。', hintLines: ['出现 / 消失方位', '如西南到东北'] },
+  { id: 'duration', label: '持续时间', hint: '几秒、几十秒，还是数分钟。', hintLines: ['持续几秒', '或数分钟'] },
+  { id: 'motion', label: '运动特征', hint: '是否匀速、闪烁、分裂、拖尾、突然变亮。', hintLines: ['匀速 / 闪烁 / 分裂', '拖尾 / 突然变亮'] },
+  { id: 'evidence', label: '影像证据', hint: '照片、视频、截图、目击者或设备信息。', hintLines: ['照片 / 视频 / 截图', '设备或目击者'] },
+]
+
+const BAD_REPORT = {
+  text: '刚刚天上有一道很亮的东西飞过去，感觉像是太空垃圾，速度很快。',
+  missing: ['时间', '地点', '出现方位', '持续时间', '运动特征', '影像证据'],
+}
+
+const GOOD_REPORT = {
+  text: '2026-05-02 21:37，在上海徐汇区向西南方向观测到一条橙白色亮迹，持续约 7 秒，从西南向东北移动，末段出现 2 次碎裂闪光并留下短暂烟迹。手机拍到 3 秒视频，未听到声响。',
+  fields: ['时间', '地点', '出现方位', '持续时间', '运动特征', '影像证据'],
+}
+
+const REPORT_RECORD_FIELDS = [
+  {
+    id: 'time',
+    label: '时间',
+    labelEn: 'TIME',
+    value: '2026-05-02 · 21:37',
+    valueEn: '2026-05-02 · 21:37',
+  },
+  {
+    id: 'location',
+    label: '地点',
+    labelEn: 'LOCATION',
+    value: '上海市徐汇区',
+    valueEn: 'Xuhui District, Shanghai',
+  },
+  {
+    id: 'direction',
+    label: '出现方位',
+    labelEn: 'VIEWING DIRECTION',
+    value: '西南方向 → 东北方向',
+    valueEn: 'Southwest → Northeast',
+  },
+  {
+    id: 'duration',
+    label: '持续时间',
+    labelEn: 'DURATION',
+    value: '约 7 秒',
+    valueEn: 'About 7 seconds',
+  },
+  {
+    id: 'motion',
+    label: '运动特征',
+    labelEn: 'MOTION CHARACTERISTICS',
+    value: '橙白色亮迹持续移动，末段出现 2 次碎裂闪光',
+    valueEn: 'Orange-white trail with two fragmentation flashes near the end',
+  },
+  {
+    id: 'evidence',
+    label: '影像证据',
+    labelEn: 'VISUAL EVIDENCE',
+    value: '手机拍摄 3 秒原始视频',
+    valueEn: '3-second original phone video',
+  },
+]
+
+const STANDARD_CARDS = [
+  {
+    id: 'debris',
+    code: 'REENTRY',
+    image: '/再入烧蚀.png',
+    title: '太空垃圾',
+    signal: '慢于流星，可能持续数秒到数十秒；常出现橙红色、碎裂、多个亮点同向移动。',
+    warning: '不能只凭“很亮”判断。需要时间、方位、持续时长和碎裂特征。',
+  },
+  {
+    id: 'meteor',
+    code: 'FIREBALL',
+    image: '/m8-game/meteor-fireball.png',
+    title: '流星',
+    signal: '通常极快，1–3 秒内划过；可能有短拖尾，偶尔爆闪。',
+    warning: '如果持续几十秒并分裂成多点同向飞行，就要谨慎排除再入碎片。',
+  },
+  {
+    id: 'satellite',
+    code: 'ORBITAL OBJECT',
+    image: '/任务结束.png',
+    title: '卫星',
+    signal: '通常匀速、无烟迹、无明显碎裂；星链可呈串珠状，亮度较稳定。',
+    warning: '卫星过境不等于太空垃圾，报告中必须写出为何排除正常卫星。',
+  },
+]
+
+const OBSERVATION_SET = [
+  { id: 'obs01', img: '/m8-game/reentry-fragments.png', type: 'debris', title: '多点同向亮迹', clue: '持续 18 秒，多个亮点同向移动，末段继续碎裂。', reportHint: '重点记录碎裂数量和飞行方向。' },
+  { id: 'obs02', img: '/m8-game/meteor-fireball.png', type: 'meteor', title: '短促斜向亮线', clue: '持续约 2 秒，单条亮线快速划过后消失。', reportHint: '重点记录持续时间和轨迹形态。' },
+  { id: 'obs03', img: '/m8-game/satellite-pass.png', type: 'satellite', title: '稳定主体过境', clue: '单个主体沿轨道方向移动，无烟迹、无持续碎裂。', reportHint: '记录烟迹、碎裂和亮度变化。' },
+  { id: 'obs04', img: '/m8-game/reentry-stage.png', type: 'debris', title: '多亮点长时段', clue: '3 个主亮点伴随细小闪光，持续约 25 秒。', reportHint: '记录是否有多个同步亮点。' },
+  { id: 'obs05', img: '/m8-game/meteor-split.png', type: 'meteor', title: '垂直短亮迹', clue: '极快下落，持续不足 1 秒，没有持续碎裂。', reportHint: '记录是否有后续亮点。' },
+  { id: 'obs06', img: '/m8-game/satellite-pass.png', type: 'satellite', title: '主体反光过境', clue: '主体清晰，亮度变化很小，运动路径平滑。', reportHint: '记录主体形状和运动路径。' },
+  { id: 'obs07', img: '/m8-game/reentry-target.png', type: 'debris', title: '低速弧线亮点', clue: '多个小点沿同一弧线移动，速度慢于普通流星。', reportHint: '写清多点之间的相对位置。' },
+  { id: 'obs08', img: '/m8-game/meteor-fireball.png', type: 'meteor', title: '末端爆闪亮迹', clue: '短时间内一闪而过，末端突然变亮后消失。', reportHint: '记录爆闪前后的持续时间。' },
+  { id: 'obs09', img: '/m8-game/satellite-pass.png', type: 'satellite', title: '轨道边缘亮点', clue: '主体沿地球边缘稳定移动，没有散落光点。', reportHint: '记录路径稳定性和亮度变化。' },
+  { id: 'obs10', img: '/再入烧蚀.png', type: 'debris', title: '长尾分段轨迹', clue: '橙色亮迹持续十余秒，前后分成多段。', reportHint: '记录颜色、持续时间和分段节奏。' },
+  { id: 'obs11', img: '/m8-game/meteor-split.png', type: 'meteor', title: '单线高速划过', clue: '只有一条极细亮线，没有多点同步移动。', reportHint: '记录是否只有单线轨迹。' },
+  { id: 'obs12', img: '/m8-game/satellite-pass.png', type: 'satellite', title: '地平线上方过境', clue: '亮点沿平滑轨道稳定移动，没有烟迹。', reportHint: '补充出现和消失方位会更可靠。' },
+  { id: 'obs13', img: '/m8-game/reentry-fragments.png', type: 'debris', title: '多点拖尾事件', clue: '多个亮点在同一方向拉开，拖尾持续存在。', reportHint: '记录颜色、持续时间和碎裂节奏。' },
+  { id: 'obs14', img: '/m8-game/meteor-fireball.png', type: 'meteor', title: '掠过式亮线', clue: '短促、明亮、单一轨迹，没有稳定后续亮点。', reportHint: '持续时间是主要判断依据。' },
+  { id: 'obs15', img: '/m8-game/satellite-pass.png', type: 'satellite', title: '稳定主体疑似', clue: '可见主体结构，运动平滑，不出现烟迹或碎裂。', reportHint: '记录主体结构和排除依据。' },
+]
+
+const PRACTICE_SET = OBSERVATION_SET.slice(0, 15)
+const PRACTICE_IDS = new Set(PRACTICE_SET.map((item) => item.id))
+
+const SAMPLE_COMMENTS = {
+  obs01: [
+    { name: '成都观测者', text: '我会补一条方位角：如果手机指南针可信，最好写成“约 240° 到 55°”。' },
+    { name: '轨道社群志愿者', text: '持续 18 秒且多点同向，确实比普通流星更接近再入碎片特征。' },
+  ],
+  obs03: [
+    { name: '南京天文社', text: '这类长时间事件最好附视频原始文件，截图容易丢失速度信息。' },
+    { name: '数据校对员', text: '请补充云量和遮挡情况，否则亮度判断会有偏差。' },
+  ],
+}
+
+const SAMPLE_COMMENTS_EN = {
+  obs01: [
+    { name: 'Chengdu observer', text: 'Add an azimuth if the phone compass is reliable, for example about 240° to 55°.' },
+    { name: 'Orbit community volunteer', text: 'A duration of 18 seconds with several co-moving lights is more consistent with re-entry debris than a normal meteor.' },
+  ],
+  obs03: [
+    { name: 'Nanjing astronomy group', text: 'Attach the original video for long events because screenshots remove speed information.' },
+    { name: 'Data reviewer', text: 'Please add cloud cover and obstructions because they can distort brightness judgments.' },
+  ],
+}
+
+const FLOW_LABEL_EN = {
+  'm8-compare': 'Identify useful evidence',
+  'm8-practice': 'Complete classification',
+  'm8-report': 'Explore observation samples',
+  'm8-community': 'Review community context',
+}
+
+const FIELD_EN = {
+  time: { label: 'Time', hint: 'Example: 2026-05-02 21:37. Record to the nearest minute when possible.', hintLines: ['2026-05-02 21:37', 'Nearest minute'] },
+  location: { label: 'Location', hint: 'City, district, coordinates, or another reproducible observation point.', hintLines: ['City / district', 'Coordinates'] },
+  direction: { label: 'Viewing Direction', hint: 'Approximate appearance and disappearance direction, such as southwest to northeast.', hintLines: ['Entry / exit direction', 'SW to NE'] },
+  duration: { label: 'Duration', hint: 'A few seconds, tens of seconds, or several minutes.', hintLines: ['A few seconds', 'Or several minutes'] },
+  motion: { label: 'Motion Characteristics', hint: 'Steady speed, flicker, breakup, trail, or sudden brightening.', hintLines: ['Steady / flicker / breakup', 'Trail / brightening'] },
+  evidence: { label: 'Visual Evidence', hint: 'Photo, video, screenshot, witness, or device information.', hintLines: ['Photo / video / screenshot', 'Device or witness'] },
+}
+
+const STANDARD_EN = {
+  debris: { title: 'Space debris', signal: 'Slower than a meteor and visible for seconds or tens of seconds; may appear orange-red, fragment, or split into several co-moving lights.', warning: 'Brightness alone is not enough. Record time, direction, duration, and fragmentation.' },
+  meteor: { title: 'Meteor', signal: 'Usually very fast and gone within 1-3 seconds; may leave a short trail or flash.', warning: 'If it lasts tens of seconds and divides into several co-moving points, carefully rule out re-entry debris.' },
+  satellite: { title: 'Satellite', signal: 'Usually steady, without smoke or clear fragmentation; a constellation may look like a string of stable lights.', warning: 'A satellite pass is not automatically debris. Explain why a normal satellite was ruled out.' },
+}
+
+const GUIDE_EN = {
+  debris: { action: 'drag downward', title: 'space debris', clue: 'Several co-moving lights, relatively slow motion, and continuing fragmentation.', reportHint: 'Drag down to classify it as space debris.' },
+  meteor: { action: 'drag left', title: 'a meteor', clue: 'One short bright streak that may end in a sudden flash.', reportHint: 'Drag left to classify it as a meteor.' },
+  satellite: { action: 'drag right', title: 'a satellite', clue: 'A recognizable body moving steadily along an orbital path.', reportHint: 'Drag right to classify it as a satellite.' },
+}
+
+const TYPE_EN = {
+  debris: { title: 'Re-entry fragment pattern', clue: 'Multiple lights move in the same direction for an extended period and may continue to fragment.', hint: 'Record the number of fragments, duration, color, and direction.' },
+  meteor: { title: 'Short meteor streak', clue: 'A single fast streak appears briefly and disappears without sustained co-moving fragments.', hint: 'Duration and the shape of the streak are the strongest clues.' },
+  satellite: { title: 'Stable orbital pass', clue: 'One stable object follows a smooth path without smoke or continuing breakup.', hint: 'Record path stability, brightness changes, and visible structure.' },
+}
+
+const TYPE_LABEL_EN = { debris: 'Space debris', meteor: 'Meteor', satellite: 'Satellite' }
+
+function localizeField(field, language) {
+  return language === 'en' ? { ...field, ...FIELD_EN[field.id] } : field
+}
+
+function localizeStandard(card, language) {
+  return language === 'en' ? { ...card, ...STANDARD_EN[card.id] } : card
+}
+
+function localizeGuide(step, language) {
+  return language === 'en' ? { ...step, ...GUIDE_EN[step.type] } : step
+}
+
+function localizeObservation(item, language, index) {
+  if (language !== 'en') return item
+  const copy = TYPE_EN[item.type]
+  return {
+    ...item,
+    title: `${copy.title} ${String(index + 1).padStart(2, '0')}`,
+    clue: copy.clue,
+    reportHint: copy.hint,
+  }
+}
+
+function getDragDecision(info, threshold = 120) {
+  if (info.offset.y > threshold || info.velocity.y > 700) return { type: 'debris', vector: { x: 0, y: 1 } }
+  if (info.offset.x < -threshold || info.velocity.x < -700) return { type: 'meteor', vector: { x: -1, y: 0 } }
+  if (info.offset.x > threshold || info.velocity.x > 700) return { type: 'satellite', vector: { x: 1, y: 0 } }
+  return null
+}
+
+function BlurRevealText({ text, className = '', delayOffset = 0 }) {
+  let characterIndex = 0
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean)
+
+  return (
+    <span className={className} aria-label={text}>
+      {words.map((word, wordIndex) => (
+        <span key={`${word}-${wordIndex}`} className="m8-blur-word" aria-hidden="true">
+          {[...word].map((char) => {
+            const index = characterIndex++
+            return (
+              <span
+                key={`${char}-${index}`}
+                className="m8-blur-char"
+                style={{ '--m8-char-delay': `${delayOffset + index * 14}ms` }}
+              >
+                {char}
+              </span>
+            )
+          })}
+          {wordIndex < words.length - 1 ? '\u00A0' : null}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+function ObservationCardContent({ item, indexLabel, totalLabel, isGuide = false }) {
+  const { pick } = useI18n()
+  const ledgerLabel = isGuide ? 'ACTION' : 'INPUT'
+  const ledgerText = isGuide ? item.action : pick('图像与运动描述', 'IMAGE AND MOTION NOTES')
+
+  return (
+    <>
+      <div className="m8-ticket-media">
+        <img src={item.img || item.image} alt="" draggable="false" />
+        <span className="m8-ticket-index">{indexLabel}</span>
+        <span className="m8-ticket-badge">OBSERVATION</span>
+      </div>
+      <div className="m8-ticket-copy">
+        <div className="m8-ticket-meta">
+          <span>SCENE {indexLabel}</span>
+          <span>{indexLabel} / {totalLabel}</span>
+        </div>
+        <h5>{item.title}</h5>
+        <p>{item.clue}</p>
+        <div className="m8-ticket-ledger" aria-hidden="true">
+          <span><b>{ledgerLabel}</b>{ledgerText}</span>
+          <span><b>NOTE</b>{item.reportHint}</span>
+        </div>
+      </div>
+    </>
+  )
+}
+
+const ReportComparison = memo(function ReportComparison() {
+  const { language, pick } = useI18n()
+  const [reportFront, setReportFront] = useState('good')
+  const [reportSwapPhase, setReportSwapPhase] = useState('idle')
+  const reportSwapTargetRef = useRef(null)
+
+  function beginReportSwap(target) {
+    if (target === reportFront || reportSwapPhase !== 'idle') return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setReportFront(target)
+      return
+    }
+    reportSwapTargetRef.current = target
+    setReportSwapPhase('separating')
+  }
+
+  function handleReportTransitionEnd(event) {
+    if (event.target !== event.currentTarget || event.propertyName !== 'transform') return
+    if (event.currentTarget.dataset.reportCard !== 'good') return
+
+    if (reportSwapPhase === 'separating') {
+      const target = reportSwapTargetRef.current
+      if (!target) {
+        setReportSwapPhase('idle')
+        return
+      }
+      setReportFront(target)
+      setReportSwapPhase('returning')
+      return
+    }
+
+    if (reportSwapPhase === 'returning') {
+      reportSwapTargetRef.current = null
+      setReportSwapPhase('idle')
+    }
+  }
+
+  function handleReportKeyDown(event, target) {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    beginReportSwap(target)
+  }
+
+  return (
+    <div className={['m8-report-compare', `is-${reportSwapPhase}`].join(' ')}>
+      <article
+        className={['is-bad', reportFront === 'bad' ? 'is-front' : 'is-back'].join(' ')}
+        data-report-card="bad"
+        role="button"
+        tabIndex={0}
+        aria-label={pick('将信息不足报告移到前面', 'Bring the incomplete report to the front')}
+        aria-pressed={reportFront === 'bad'}
+        aria-disabled={reportSwapPhase !== 'idle'}
+        onClick={() => beginReportSwap('bad')}
+        onKeyDown={(event) => handleReportKeyDown(event, 'bad')}
+        onTransitionEnd={handleReportTransitionEnd}
+      >
+        <span className="m8-report-card-kicker">{pick('信息不足', 'INCOMPLETE')}</span>
+        <h4>{pick('信息不足', 'Incomplete report')}</h4>
+        <blockquote>{pick(BAD_REPORT.text, 'A very bright object just crossed the sky. It felt like space debris and moved very fast.')}</blockquote>
+        <div className="m8-report-missing">
+          <p>{pick('缺少以下信息', 'MISSING INFORMATION')}</p>
+          <ol className="m8-report-missing-list" aria-label={pick('这份记录缺少的信息', 'Information missing from this report')}>
+            {BAD_REPORT.missing.map((item, index) => {
+              const field = localizeField(REQUIRED_FIELDS[index], language)
+              return (
+                <li key={item}>
+                  <span>{String(index + 1).padStart(2, '0')}</span>
+                  <b>{language === 'en' ? field.label : item}</b>
+                  <i aria-hidden="true">—</i>
+                </li>
+              )
+            })}
+          </ol>
+        </div>
+      </article>
+      <article
+        className={['is-good', reportFront === 'good' ? 'is-front' : 'is-back'].join(' ')}
+        data-report-card="good"
+        role="button"
+        tabIndex={0}
+        aria-label={pick('将可复核记录移到前面', 'Bring the verifiable report to the front')}
+        aria-pressed={reportFront === 'good'}
+        aria-disabled={reportSwapPhase !== 'idle'}
+        onClick={() => beginReportSwap('good')}
+        onKeyDown={(event) => handleReportKeyDown(event, 'good')}
+        onTransitionEnd={handleReportTransitionEnd}
+      >
+        <span className="m8-report-card-kicker">{pick('可复核记录', 'VERIFIABLE')}</span>
+        <h4>{pick('可复核记录', 'Verifiable report')}</h4>
+        <div className="m8-report-record" aria-label={pick('可复核记录的六项观测信息', 'Six fields in the verifiable report')}>
+          {REPORT_RECORD_FIELDS.map((field, index) => (
+            <div className="m8-report-record-field" key={field.id}>
+              <span className="m8-report-record-index">{String(index + 1).padStart(2, '0')}</span>
+              <b>{language === 'en' ? field.labelEn : field.label}</b>
+              <strong className={field.id === 'motion' ? 'is-long' : ''}>
+                {language === 'en' ? field.valueEn : field.value}
+              </strong>
+            </div>
+          ))}
+        </div>
+      </article>
+    </div>
+  )
+})
+
+function ClassificationDeck({ items, practice, onAnswer, onRestart }) {
+  const { language, pick } = useI18n()
+  const [cursor, setCursor] = useState(0)
+  const [guideIndex, setGuideIndex] = useState(0)
+  const [guideDone, setGuideDone] = useState(false)
+  const [resolving, setResolving] = useState(false)
+  const [feedback, setFeedback] = useState(null)
+  const [guideFeedback, setGuideFeedback] = useState(null)
+  const [guideDragging, setGuideDragging] = useState(false)
+  const [backpackEntries, setBackpackEntries] = useState([])
+  const resolvingRef = useRef(false)
+  const draggingRef = useRef(false)
+  const guideFeedbackTimerRef = useRef(null)
+  const guideCardRef = useRef(null)
+  const guidePointerRef = useRef(null)
+  const currentCardRef = useRef(null)
+  const backpackRef = useRef(null)
+  const reduceMotion = useReducedMotion()
+  const x = useMotionValue(0)
+  const y = useMotionValue(0)
+  const scale = useMotionValue(1)
+  const opacity = useMotionValue(1)
+  const guideX = useMotionValue(0)
+  const guideY = useMotionValue(0)
+  const guideScale = useMotionValue(1)
+  const guideOpacity = useMotionValue(1)
+  const current = items[cursor]
+  const guide = localizeGuide(GUIDE_STEPS[guideIndex], language)
+  const backpackEntry = backpackEntries[backpackEntries.length - 1] || null
+  const correctCount = items.filter((item) => practice[item.id] === item.type).length
+  const score = Math.round((correctCount / items.length) * 100)
+
+  useEffect(() => {
+    if (guideDone || !guideCardRef.current || !guidePointerRef.current) return undefined
+
+    const vector = guide.vector
+    if (guideFeedbackTimerRef.current) {
+      window.clearTimeout(guideFeedbackTimerRef.current)
+      guideFeedbackTimerRef.current = null
+    }
+    guideX.set(0)
+    guideY.set(0)
+    guideScale.set(1)
+    guideOpacity.set(1)
+    setGuideFeedback(null)
+    setGuideDragging(false)
+
+    const ctx = gsap.context(() => {
+      gsap.set(guidePointerRef.current, {
+        autoAlpha: reduceMotion ? 0 : 1,
+        x: vector.x < 0 ? 170 : vector.x > 0 ? -170 : 0,
+        y: vector.y > 0 ? -148 : 158,
+        scale: 1,
+      })
+
+      if (reduceMotion) return
+
+      const timeline = gsap.timeline({
+        repeat: -1,
+        repeatDelay: 0.72,
+        defaults: { ease: 'power3.inOut' },
+      })
+
+      if (vector.y > 0) {
+        timeline
+          .fromTo(guidePointerRef.current, { autoAlpha: 0, y: -158 }, { autoAlpha: 1, duration: 0.24 })
+          .to(guidePointerRef.current, { y: 180, duration: 0.72 })
+          .to(guidePointerRef.current, { autoAlpha: 0, duration: 0.2 })
+          return
+      }
+
+      timeline
+        .fromTo(guidePointerRef.current, { autoAlpha: 0, x: vector.x * -188, y: 158 }, { autoAlpha: 1, duration: 0.24 })
+        .to(guidePointerRef.current, { x: vector.x * 204, duration: 0.7 })
+        .to(guidePointerRef.current, { autoAlpha: 0, duration: 0.2 })
+    })
+
+    return () => ctx.revert()
+  }, [guide.vector, guideDone, guideIndex, guideOpacity, guideScale, guideX, guideY, reduceMotion])
+
+  useEffect(() => {
+    if (guideDone || guideDragging || resolving || guideFeedback || reduceMotion) {
+      return undefined
+    }
+
+    const targetX = guide.vector.x * 48
+    const targetY = guide.vector.y * 44
+    const controls = [
+      animate(guideX, [0, targetX, 0], { duration: 1.55, ease: 'easeInOut', repeat: Infinity }),
+      animate(guideY, [0, targetY, 0], { duration: 1.55, ease: 'easeInOut', repeat: Infinity }),
+    ]
+
+    return () => controls.forEach((control) => control.stop())
+  }, [guide.vector, guideDone, guideDragging, guideFeedback, guideX, guideY, reduceMotion, resolving])
+
+  useEffect(() => () => {
+    if (guideFeedbackTimerRef.current) window.clearTimeout(guideFeedbackTimerRef.current)
+  }, [])
+
+  async function submit(type, vector = { x: 0, y: 0 }) {
+    if (!current || resolvingRef.current) return
+    resolvingRef.current = true
+    setResolving(true)
+    const correct = type === current.type
+    const label = language === 'en'
+      ? TYPE_LABEL_EN[current.type]
+      : PRACTICE_OPTIONS.find(([option]) => option === current.type)?.[1]
+    setFeedback({ correct, label })
+    onAnswer(current.id, type)
+
+    const isBackpackDrop = type === 'debris'
+    const duration = reduceMotion ? 0.01 : isBackpackDrop ? 0.52 : 0.34
+    const cardRect = currentCardRef.current?.getBoundingClientRect()
+    const targetRect = backpackRef.current?.getBoundingClientRect()
+    const hasBackpackTarget = isBackpackDrop && cardRect && targetRect
+    const exitX = hasBackpackTarget
+      ? x.get() + targetRect.left + targetRect.width / 2 - (cardRect.left + cardRect.width / 2)
+      : vector.x * Math.max(window.innerWidth * 0.68, 720)
+    const exitY = hasBackpackTarget
+      ? y.get() + targetRect.top + targetRect.height / 2 - (cardRect.top + cardRect.height / 2)
+      : vector.y * Math.max(window.innerHeight * 0.5, 420)
+    await Promise.all([
+      animate(x, exitX, { duration, ease: [0.22, 1, 0.36, 1] }),
+      animate(y, exitY, { duration, ease: [0.22, 1, 0.36, 1] }),
+      animate(scale, isBackpackDrop ? 0.24 : 0.92, { duration, ease: [0.22, 1, 0.36, 1] }),
+      animate(opacity, isBackpackDrop ? 0.08 : 0, { duration: duration * 0.82 }),
+    ])
+
+    if (isBackpackDrop) {
+      setBackpackEntries((entries) => [
+        ...entries,
+        {
+          id: current.id,
+          title: current.title,
+          correct,
+          index: cursor + 1,
+          image: current.img || current.image,
+        },
+      ])
+    }
+
+    x.set(0)
+    y.set(0)
+    scale.set(1)
+    opacity.set(1)
+    setCursor((value) => value + 1)
+    draggingRef.current = false
+    resolvingRef.current = false
+    setResolving(false)
+  }
+
+  function resetGuideCardMotion() {
+    animate(guideX, 0, reduceMotion ? { duration: 0.01 } : { type: 'spring', stiffness: 420, damping: 34 })
+    animate(guideY, 0, reduceMotion ? { duration: 0.01 } : { type: 'spring', stiffness: 420, damping: 34 })
+    animate(guideScale, 1, reduceMotion ? { duration: 0.01 } : { type: 'spring', stiffness: 360, damping: 28 })
+    animate(guideOpacity, 1, { duration: reduceMotion ? 0.01 : 0.2 })
+  }
+
+  async function completeGuideDrag(vector) {
+    resolvingRef.current = true
+    setResolving(true)
+    setGuideFeedback({ type: 'success', text: pick(`动作正确：${guide.action}`, `Correct gesture: ${guide.action}`) })
+
+    const duration = reduceMotion ? 0.01 : 0.34
+    const exitX = vector.x * Math.max(window.innerWidth * 0.68, 720)
+    const exitY = vector.y * Math.max(window.innerHeight * 0.5, 420)
+    await Promise.all([
+      animate(guideX, exitX, { duration, ease: [0.22, 1, 0.36, 1] }),
+      animate(guideY, exitY, { duration, ease: [0.22, 1, 0.36, 1] }),
+      animate(guideScale, 0.92, { duration }),
+      animate(guideOpacity, 0, { duration: duration * 0.78 }),
+    ])
+    await new Promise((resolve) => window.setTimeout(resolve, reduceMotion ? 10 : 360))
+
+    guideX.set(0)
+    guideY.set(0)
+    guideScale.set(1)
+    guideOpacity.set(1)
+    resolvingRef.current = false
+    setResolving(false)
+
+    if (guideIndex < GUIDE_STEPS.length - 1) {
+      setGuideIndex((value) => value + 1)
+      return
+    }
+    setGuideDone(true)
+  }
+
+  function rejectGuideDrag(message) {
+    if (guideFeedbackTimerRef.current) window.clearTimeout(guideFeedbackTimerRef.current)
+    setGuideFeedback({ type: 'error', text: message })
+    resetGuideCardMotion()
+    guideFeedbackTimerRef.current = window.setTimeout(() => {
+      setGuideFeedback(null)
+      guideFeedbackTimerRef.current = null
+    }, 1100)
+  }
+
+  function restart() {
+    onRestart()
+    setCursor(0)
+    setGuideIndex(0)
+    setGuideDone(false)
+    setFeedback(null)
+    setGuideFeedback(null)
+    setBackpackEntries([])
+    if (guideFeedbackTimerRef.current) {
+      window.clearTimeout(guideFeedbackTimerRef.current)
+      guideFeedbackTimerRef.current = null
+    }
+    resolvingRef.current = false
+    draggingRef.current = false
+    x.set(0)
+    y.set(0)
+    scale.set(1)
+    opacity.set(1)
+    guideX.set(0)
+    guideY.set(0)
+    guideScale.set(1)
+    guideOpacity.set(1)
+  }
+
+  if (!guideDone) {
+    return (
+      <div className="m8-card-game m8-card-game--guide" aria-live="polite">
+        <div className="m8-game-status">
+          <span>{String(guideIndex + 1).padStart(2, '0')} / {String(GUIDE_STEPS.length).padStart(2, '0')}</span>
+          <div className="m8-game-progress" aria-hidden="true"><i style={{ width: `${((guideIndex + 1) / GUIDE_STEPS.length) * 100}%` }} /></div>
+          <b>{pick('先完成操作引导', 'COMPLETE THE GESTURE GUIDE')}</b>
+        </div>
+        <div className="m8-guide-shell">
+          <div className={['m8-guide-stage', guideDragging && 'is-dragging', guideFeedback && `is-${guideFeedback.type}`].filter(Boolean).join(' ')}>
+            <div className={['m8-guide-copy', guideFeedback && `is-${guideFeedback.type}`].filter(Boolean).join(' ')}>
+              <span>GESTURE {String(guideIndex + 1).padStart(2, '0')} / {String(GUIDE_STEPS.length).padStart(2, '0')}</span>
+              <h5>{pick(`此卡片为${guide.title}`, `This card shows ${guide.title}`)}</h5>
+              <p>{guideFeedback?.text || pick(`跟随指示${guide.action}`, `Follow the cue and ${guide.action}`)}</p>
+            </div>
+            <motion.article
+              ref={guideCardRef}
+              className={['m8-game-card', 'm8-training-card', 'is-current', 'is-guide-demo', guideFeedback && `is-${guideFeedback.type}`].filter(Boolean).join(' ')}
+              style={{ x: guideX, y: guideY, scale: guideScale, opacity: guideOpacity }}
+              drag={resolving ? false : true}
+              dragElastic={0.72}
+              dragMomentum={false}
+              onDragStart={() => {
+                setGuideDragging(true)
+                setGuideFeedback(null)
+              }}
+              onDragEnd={(_, info) => {
+                setGuideDragging(false)
+                if (resolvingRef.current) return
+                const decision = getDragDecision(info, 96)
+                if (!decision) {
+                  rejectGuideDrag(pick(`拖动距离再明显一点：${guide.action}`, `Drag farther: ${guide.action}`))
+                  return
+                }
+                if (decision.type !== guide.type) {
+                  rejectGuideDrag(pick(`方向不对，请${guide.action}`, `Wrong direction; please ${guide.action}`))
+                  return
+                }
+                completeGuideDrag(decision.vector)
+              }}
+            >
+              <ObservationCardContent
+                item={{ ...guide, img: guide.image }}
+                indexLabel={String(guideIndex + 1).padStart(2, '0')}
+                totalLabel={String(GUIDE_STEPS.length).padStart(2, '0')}
+                isGuide
+              />
+            </motion.article>
+            <span
+              ref={guidePointerRef}
+              className={['m8-guide-pointer', (guideDragging || guideFeedback) && 'is-hidden'].filter(Boolean).join(' ')}
+              aria-hidden="true"
+            >
+              <i />
+            </span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!current) {
+    return (
+      <div className="m8-game-summary" aria-live="polite">
+        <span>ROUND COMPLETE</span>
+        <strong>{score}%</strong>
+        <h5>{score >= 66 ? pick('分类训练通过', 'Classification passed') : pick('再观察一次运动特征', 'Review the motion again')}</h5>
+        <p>{correctCount} / {items.length} {pick('判断正确', 'CORRECT')}</p>
+        <button type="button" onClick={restart}>{pick('重新开始', 'Restart')}</button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="m8-card-game">
+      <div className="m8-game-status" aria-live="polite">
+        <span>{String(cursor + 1).padStart(2, '0')} / {String(items.length).padStart(2, '0')}</span>
+        <div className="m8-game-progress" aria-hidden="true"><i style={{ width: `${(cursor / items.length) * 100}%` }} /></div>
+        <b>{feedback ? (feedback.correct ? pick('判断正确', 'CORRECT') : `${pick('正确分类', 'CORRECT CLASS')}: ${feedback.label}`) : pick('观察运动特征', 'OBSERVE THE MOTION')}</b>
+      </div>
+
+      <div className="m8-game-stage">
+        {items.slice(cursor + 1, cursor + 2).map((item, index) => (
+          <article
+            key={item.id}
+            className="m8-game-card m8-training-card is-queued"
+            style={{ '--stack-index': index + 1 }}
+            aria-hidden="true"
+          >
+            <ObservationCardContent
+              item={item}
+              indexLabel={String(cursor + index + 2).padStart(2, '0')}
+              totalLabel={String(items.length).padStart(2, '0')}
+            />
+          </article>
+        ))}
+        <motion.article
+          key={current.id}
+          ref={currentCardRef}
+          className="m8-game-card m8-training-card is-current"
+          style={{ x, y, scale, opacity }}
+          drag={resolving ? false : true}
+          dragElastic={0.72}
+          dragMomentum={false}
+          onDragStart={() => {
+            draggingRef.current = true
+          }}
+          onDragEnd={(_, info) => {
+            draggingRef.current = false
+            const decision = getDragDecision(info)
+            if (decision) submit(decision.type, decision.vector)
+            else {
+              animate(x, 0, reduceMotion ? { duration: 0.01 } : { type: 'spring', stiffness: 420, damping: 34 })
+              animate(y, 0, reduceMotion ? { duration: 0.01 } : { type: 'spring', stiffness: 420, damping: 34 })
+            }
+          }}
+        >
+          <ObservationCardContent
+            item={current}
+            indexLabel={String(cursor + 1).padStart(2, '0')}
+            totalLabel={String(items.length).padStart(2, '0')}
+          />
+        </motion.article>
+      </div>
+
+      <div className="m8-drop-slots" role="group" aria-label={pick('太空垃圾背包', 'Space-debris collection')}>
+        <button
+          ref={backpackRef}
+          type="button"
+          disabled={resolving}
+          className={['m8-drop-slot', 'm8-backpack-slot', backpackEntries.length && 'is-filled'].filter(Boolean).join(' ')}
+          onClick={() => submit(DEBRIS_SLOT.type, DEBRIS_SLOT.vector)}
+        >
+          <span className="m8-backpack-mark" aria-hidden="true">
+            <AnimatePresence initial={false}>
+              {backpackEntries.slice(-4).map((entry, index) => (
+                <motion.span
+                  key={`${entry.id}-${entry.index}`}
+                  className="m8-backpack-inserted"
+                  style={{ '--backpack-index': index }}
+                  initial={{ opacity: 0, y: -18, scale: 0.82 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                >
+                  <img src={entry.image} alt="" draggable="false" />
+                </motion.span>
+              ))}
+            </AnimatePresence>
+            <i />
+          </span>
+          <span className="m8-drop-copy">
+            <strong>{backpackEntry ? pick('已放入太空垃圾背包', 'ADDED TO DEBRIS COLLECTION') : pick('太空垃圾背包', 'SPACE-DEBRIS COLLECTION')}</strong>
+            <small>{backpackEntry ? `SCENE ${String(backpackEntry.index).padStart(2, '0')} · ${backpackEntry.title}` : pick('向下拖拽卡片，把疑似太空垃圾收入背包', 'Drag downward to collect suspected space debris')}</small>
+          </span>
+          <span className="m8-backpack-state" aria-label={pick(`已收纳 ${backpackEntries.length} 张卡片`, `${backpackEntries.length} cards collected`)}>
+            <b>{backpackEntries.length}</b>
+            <small>{pick('已收纳', 'COLLECTED')}</small>
+          </span>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export default function M8({ onComplete }) {
+  const { language, pick } = useI18n()
+  const rootRef = useRef(null)
+  const heroMarkRef = useRef(null)
+  const [lessonStep, setLessonStep] = useState(0)
+  const [practice, setPractice] = useState({})
+  const [selectedId, setSelectedId] = useState('obs01')
+  const [activeCommunityId, setActiveCommunityId] = useState('obs01')
+  const [activeSection, setActiveSection] = useState('m8-compare')
+  const [flowPosition, setFlowPosition] = useState(6)
+  const flowNavigationTargetRef = useRef(null)
+  const flowNavigationTimerRef = useRef(null)
+
+  const observationSet = useMemo(
+    () => OBSERVATION_SET.map((item, index) => localizeObservation(item, language, index)),
+    [language],
+  )
+  const practiceSet = observationSet.slice(0, 15)
+  const requiredFields = REQUIRED_FIELDS.map((field) => localizeField(field, language))
+  const flowSteps = FLOW_STEPS.map((step) => ({ ...step, label: language === 'en' ? FLOW_LABEL_EN[step.id] : step.label }))
+  const selected = observationSet.find((item) => item.id === selectedId) || observationSet[0]
+  const selectedIndex = Math.max(0, observationSet.findIndex((item) => item.id === selected.id))
+  const selectedNumber = String(selectedIndex + 1).padStart(2, '0')
+  const activeCommunity = observationSet.find((item) => item.id === activeCommunityId) || selected
+  const practiceAnsweredCount = Object.keys(practice).filter((id) => PRACTICE_IDS.has(id)).length
+  const practiceScore = useMemo(() => {
+    const answered = Object.keys(practice).filter((id) => PRACTICE_IDS.has(id))
+    if (!answered.length) return 0
+    const correct = answered.filter((id) => practice[id] === PRACTICE_SET.find((item) => item.id === id)?.type).length
+    return Math.round((correct / answered.length) * 100)
+  }, [practice])
+  const practiceDone = practiceAnsweredCount === PRACTICE_SET.length && practiceScore >= 66
+  const canComplete = practiceDone
+  const communityComments = (language === 'en' ? SAMPLE_COMMENTS_EN : SAMPLE_COMMENTS)[activeCommunity.id] || []
+
+  useEffect(() => {
+    const root = rootRef.current
+    if (!root) return undefined
+
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const heroInteractionArea = heroMarkRef.current?.closest('.m8-header')
+    let observer = null
+    let blurObserver = null
+    let xTo = null
+    let yTo = null
+
+    const ctx = gsap.context(() => {
+      gsap.set('.m8-reveal', { autoAlpha: 0, y: 34 })
+      gsap.to('.m8-reveal', {
+        autoAlpha: 1,
+        y: 0,
+        duration: reduceMotion ? 0.01 : 0.85,
+        ease: 'power3.out',
+        stagger: 0.08,
+      })
+
+      const sections = gsap.utils.toArray('.m8-animate-section')
+      observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return
+          const targets = entry.target.querySelectorAll(
+            '.m8-section-heading, .m8-report-layout, .m8-required-fields, .m8-standard-tabs, .m8-practice-head, .m8-card-game, .m8-workbench, .m8-community-layout, .m8-complete',
+          )
+          gsap.fromTo(targets,
+            { autoAlpha: 0, y: 30 },
+            {
+              autoAlpha: 1,
+              y: 0,
+              duration: reduceMotion ? 0.01 : 0.72,
+              ease: 'power3.out',
+              stagger: 0.07,
+              overwrite: 'auto',
+            },
+          )
+          observer.unobserve(entry.target)
+        })
+      }, { threshold: 0.18 })
+      sections.forEach((section) => observer.observe(section))
+
+      blurObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          entry.target.classList.toggle('is-in-view', entry.isIntersecting)
+        })
+      }, { threshold: 0.12 })
+      root.querySelectorAll('.m8-standard-panel').forEach((panel) => blurObserver.observe(panel))
+
+      if (!reduceMotion && heroMarkRef.current) {
+        xTo = gsap.quickTo(heroMarkRef.current, 'x', { duration: 0.72, ease: 'power3.out' })
+        yTo = gsap.quickTo(heroMarkRef.current, 'y', { duration: 0.72, ease: 'power3.out' })
+      }
+    }, root)
+
+    function handlePointerMove(event) {
+      if (!xTo || !yTo) return
+      const rect = heroInteractionArea.getBoundingClientRect()
+      const px = (event.clientX - rect.left) / rect.width - 0.5
+      const py = (event.clientY - rect.top) / rect.height - 0.5
+      xTo(px * 18)
+      yTo(py * 12)
+    }
+
+    if (heroInteractionArea) heroInteractionArea.addEventListener('pointermove', handlePointerMove)
+    return () => {
+      if (heroInteractionArea) heroInteractionArea.removeEventListener('pointermove', handlePointerMove)
+      if (observer) observer.disconnect()
+      if (blurObserver) blurObserver.disconnect()
+      ctx.revert()
+    }
+  }, [])
+
+  useEffect(() => {
+    const ids = ['m8-compare', 'm8-practice', 'm8-report', 'm8-community']
+    const sections = ids.map((id) => document.getElementById(id)).filter(Boolean)
+    if (!sections.length) return undefined
+
+    let frameId = 0
+    const updateActiveSection = () => {
+      frameId = 0
+
+      const marker = Math.min(window.innerHeight * 0.34, 340)
+      const markerY = window.scrollY + marker
+      const startY = sections[0].getBoundingClientRect().top + window.scrollY
+      const endY = sections[sections.length - 1].getBoundingClientRect().bottom + window.scrollY
+      const rawProgress = (markerY - startY) / Math.max(endY - startY, 1)
+      const clampedProgress = Math.min(1, Math.max(0, rawProgress))
+      setFlowPosition(6 + clampedProgress * 88)
+
+      if (flowNavigationTargetRef.current) return
+
+      let current = sections[0]
+      for (const section of sections) {
+        if (section.getBoundingClientRect().top <= marker) current = section
+        else break
+      }
+      setActiveSection((previous) => previous === current.id ? previous : current.id)
+    }
+    const handleScroll = () => {
+      if (frameId) return
+      frameId = requestAnimationFrame(updateActiveSection)
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    updateActiveSection()
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+      if (frameId) cancelAnimationFrame(frameId)
+      if (flowNavigationTimerRef.current) window.clearTimeout(flowNavigationTimerRef.current)
+    }
+  }, [])
+
+  function selectObservation(item) {
+    setSelectedId(item.id)
+    setActiveCommunityId(item.id)
+  }
+
+  function handleComplete() {
+    if (!canComplete) return
+    onComplete()
+  }
+
+  function goTo(sectionId) {
+    if (flowNavigationTimerRef.current) window.clearTimeout(flowNavigationTimerRef.current)
+    flowNavigationTargetRef.current = sectionId
+    setActiveSection(sectionId)
+    const nextIndex = Math.max(0, flowSteps.findIndex((step) => step.id === sectionId))
+    setFlowPosition(6 + (nextIndex / (flowSteps.length - 1)) * 88)
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    flowNavigationTimerRef.current = window.setTimeout(() => {
+      if (flowNavigationTargetRef.current === sectionId) flowNavigationTargetRef.current = null
+    }, 1200)
+  }
+
+  function handleStandardKeyDown(event, index) {
+    let nextIndex = null
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = (index + 1) % STANDARD_CARDS.length
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = (index - 1 + STANDARD_CARDS.length) % STANDARD_CARDS.length
+    if (event.key === 'Home') nextIndex = 0
+    if (event.key === 'End') nextIndex = STANDARD_CARDS.length - 1
+    if (nextIndex === null) return
+    event.preventDefault()
+    setLessonStep(nextIndex)
+    requestAnimationFrame(() => document.getElementById(`m8-standard-tab-${nextIndex}`)?.focus())
+  }
+
+  return (
+    <section ref={rootRef} className="m8" data-module-scroll-target>
+      <nav
+        className="m8-flow"
+        aria-label={pick('观测报告流程', 'Observation report flow')}
+        style={{ '--m8-flow-current': `${flowPosition}%` }}
+      >
+        <div className="m8-flow-meter">
+          <span className="m8-flow-track" aria-hidden="true" />
+          <span className="m8-flow-fill" aria-hidden="true" />
+          {flowSteps.map((step, stepIndex) => {
+            const done = step.id === 'm8-compare'
+              || (step.id === 'm8-practice' && practiceDone)
+            const nodePosition = 6 + (stepIndex / (flowSteps.length - 1)) * 88
+
+            return (
+              <button
+                key={step.id}
+                type="button"
+                className={['m8-flow-node', done && 'is-done', activeSection === step.id && 'is-current'].filter(Boolean).join(' ')}
+                style={{ '--m8-flow-node': `${nodePosition}%` }}
+                aria-label={`${pick('前往阶段', 'Go to stage')} ${step.index} ${step.code}: ${step.label}`}
+                aria-current={activeSection === step.id ? 'step' : undefined}
+                onClick={() => goTo(step.id)}
+              >
+                <span className="m8-flow-dot" aria-hidden="true" />
+                <span className="m8-flow-node-label" aria-hidden="true">
+                  <span><b>{step.index}</b>{step.code}</span>
+                  <small>{step.label}</small>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </nav>
+
+      <div className="m8-content">
+        <header className="m8-header">
+          <span className="m8-reveal">MODULE 08 / FIELD OBSERVATION</span>
+          <div className="m8-hero-composition">
+            <div className="m8-header-copy">
+              <h2 className="m8-reveal">
+                <span>{pick('太空垃圾观测记录', 'Space Debris Observation Record')}</span>
+              </h2>
+              <p className="m8-reveal">{pick('发现疑似太空垃圾后，需要记录时间、地点、出现方位、持续时间、运动特征和影像证据。这些信息可以用于后续确认目标、比对运动轨迹，并判断这次观测是否可靠。', 'When a suspected piece of space debris is observed, record the time, location, viewing direction, duration, motion characteristics, and visual evidence. These details can later be used to verify the target, compare its trajectory, and assess whether the observation is reliable.')}</p>
+            </div>
+            <div ref={heroMarkRef} className="m8-hero-mark m8-reveal" aria-hidden="true">
+              <span>6</span>
+              <b>{pick('要素', 'FIELDS')}</b>
+              <i />
+            </div>
+          </div>
+          <ol className="m8-hero-fields m8-reveal" aria-label={pick('观测记录六要素', 'Six observation record fields')}>
+            {requiredFields.map((field, index) => (
+              <li key={field.id}>
+                <small>{String(index + 1).padStart(2, '0')}</small>
+                <strong>{field.label}</strong>
+              </li>
+            ))}
+          </ol>
+        </header>
+
+      <section id="m8-compare" className="m8-band m8-compare m8-animate-section">
+        <div className="m8-report-layout">
+          <aside className="m8-report-rail">
+            <span>01 / REPORT ANATOMY</span>
+            <h3>{pick('太空垃圾观测记录', 'SPACE DEBRIS OBSERVATION RECORD')}</h3>
+            <p>{pick('一次有效的观测需要留下能够被核查的信息。对比下面两份记录，看看哪些内容能够帮助后续确认目标和运动轨迹。', 'A useful observation record contains information that can be checked later. Compare the two reports to see which details make an observation verifiable.')}</p>
+          </aside>
+          <ReportComparison />
+        </div>
+      </section>
+
+      <section id="m8-practice" className="m8-band m8-training m8-animate-section">
+        <div className="m8-section-heading">
+          <span>02 / CLASSIFICATION LAB</span>
+          <div><h3>{pick('先看运动，再判断对象。', 'Read motion before naming the object.')}</h3><p>{pick('亮度不是充分证据。持续时间、碎裂方式与运动稳定性更有区分度。', 'Brightness is not enough. Duration, breakup pattern, and motion stability are more diagnostic.')}</p></div>
+        </div>
+
+        <div className="m8-standard-tabs" role="radiogroup" aria-label={pick('观测对象分类', 'Observation object classification')}>
+          {STANDARD_CARDS.map((sourceCard, index) => {
+            const card = localizeStandard(sourceCard, language)
+            const active = lessonStep === index
+            return (
+              <button
+                key={card.id}
+                id={`m8-standard-tab-${index}`}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                tabIndex={active ? 0 : -1}
+                className={['m8-standard-panel', active && 'is-active'].filter(Boolean).join(' ')}
+                onPointerEnter={() => {
+                  if (lessonStep !== index) setLessonStep(index)
+                }}
+                onFocus={() => setLessonStep(index)}
+                onClick={() => setLessonStep(index)}
+                onKeyDown={(event) => handleStandardKeyDown(event, index)}
+              >
+                <span
+                  className={['m8-standard-visual', card.id === 'meteor' && 'is-meteor'].filter(Boolean).join(' ')}
+                  style={card.image ? { backgroundImage: `url("${card.image}")` } : undefined}
+                  aria-hidden="true"
+                />
+                <span className="m8-standard-shade" aria-hidden="true" />
+                <span className="m8-standard-label">0{index + 1} · {card.code}</span>
+                <span className="m8-standard-number" aria-hidden="true">0{index + 1}</span>
+                <span className="m8-standard-content">
+                  <b>{card.title}</b>
+                  <BlurRevealText text={card.signal} className="m8-standard-signal m8-blur-text" />
+                  <BlurRevealText text={card.warning} className="m8-standard-warning m8-blur-text" delayOffset={180} />
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="m8-practice-head">
+          <div><span>SCENE TEST</span><h4>{pick('判断十五组观测事件', 'Classify fifteen observation scenes')}</h4></div>
+          <div><strong>{practiceScore}%</strong><span>{practiceAnsweredCount}/15 {pick('已判断', 'ANSWERED')}</span></div>
+        </div>
+
+        <ClassificationDeck
+          items={practiceSet}
+          practice={practice}
+          onAnswer={(id, type) => setPractice((current) => ({ ...current, [id]: type }))}
+          onRestart={() => setPractice({})}
+        />
+      </section>
+
+      <section id="m8-report" className="m8-band m8-report-workbench m8-animate-section">
+        <div className="m8-section-heading">
+          <span>03 / OBSERVATION SAMPLES</span>
+          <div><h3>{pick('浏览事件，观察关键线索。', 'Explore events and examine their key clues.')}</h3><p>{pick('切换样本，对照图像与观测提示。', 'Compare each image with its observation clues.')}</p></div>
+        </div>
+
+        <div className="m8-workbench" style={{ gridTemplateColumns: '1fr' }}>
+          <div className="m8-observation-picker">
+            <div className="m8-selected-observation">
+              <div className="m8-selected-media">
+                <img src={selected.img} alt="" />
+              </div>
+            </div>
+          </div>
+
+
+        </div>
+        <div className="m8-observation-carousel" aria-label={pick('切换观测素材', 'Choose observation media')}>
+          <div className="m8-observation-strip-head">
+            <span>{pick('事件样本', 'EVENT SAMPLES')}</span>
+            <small>{selectedNumber} / {String(observationSet.length).padStart(2, '0')} · {pick('横向滚动选择', 'SCROLL TO SELECT')}</small>
+          </div>
+          <div className="m8-observation-thumbs">
+            {observationSet.map((item, index) => (
+              <button
+                key={item.id}
+                type="button"
+                className={selectedId === item.id ? 'is-active' : ''}
+                onClick={() => selectObservation(item)}
+                aria-label={`${pick('选择事件', 'Select event')} ${index + 1}: ${item.title}`}
+              >
+                <img src={item.img} alt="" loading="lazy" /><span>{String(index + 1).padStart(2, '0')}</span>
+              </button>
+            ))}
+          </div>
+          <p className="m8-observation-hint">{selected.reportHint}</p>
+        </div>
+      </section>
+
+      <section id="m8-community" className="m8-band m8-community m8-animate-section">
+        <div className="m8-section-heading">
+          <span>04 / COMMUNITY REVIEW</span>
+          <div><h3>{pick('让其他观测者补足盲点。', 'Let other observers fill the blind spots.')}</h3><p>{pick('社区反馈用于补充方位、天气、设备与原始文件等上下文。', 'Community feedback adds direction, weather, device, and source-file context.')}</p></div>
+        </div>
+        <div className="m8-community-layout">
+          <div className="m8-community-event">
+            <img src={activeCommunity.img} alt="" />
+            <span>{activeCommunity.type.toUpperCase()}</span>
+            <h4>{activeCommunity.title}</h4>
+            <p>{activeCommunity.clue}</p>
+          </div>
+          <div className="m8-comment-list">
+            {communityComments.map((comment, index) => (
+              <motion.article key={`${comment.name}-${index}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+                <span>{String(index + 1).padStart(2, '0')}</span>
+                <div><b>{comment.name}</b><p>{comment.text}</p></div>
+              </motion.article>
+            ))}
+            {!communityComments.length && <p className="m8-empty-comments">{pick('此样本暂无补充讨论。', 'No additional discussion for this sample.')}</p>}
+          </div>
+        </div>
+      </section>
+
+      <footer className="m8-complete">
+        <div>
+          <span>TRAINING STATUS</span>
+          <p>{!practiceDone ? pick('完成全部 15 组判断并达到 66% 正确率。', 'Complete all 15 classifications with at least 66% accuracy.') : pick('观测分类训练已完成。', 'Observation classification training is complete.')}</p>
+        </div>
+        <button type="button" onClick={handleComplete} disabled={!canComplete}>
+          {canComplete ? pick('完成观测教学', 'Complete observation training') : pick('等待分类训练', 'Awaiting classification')}
+        </button>
+      </footer>
+      </div>
+    </section>
+  )
+}

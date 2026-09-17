@@ -1,0 +1,202 @@
+.m1-root {
+  position: relative;
+  isolation: isolate;
+  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  /* `hidden` creates a scroll container and breaks the sticky model stage. */
+  overflow: clip;
+  color: #e9ebf6;
+  background: #050713;
+}
+
+.m1-reveal-word,
+.m1-reveal-char {
+  display: inline-block;
+}
+
+.m1-reveal-word {
+  white-space: nowrap;
+}
+
+.m1-source-media {
+  opacity: 0.2;
+  transform: scale(1.03);
+  transition:
+    opacity 260ms ease,
+    transform 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.m1-source-label,
+.m1-source-meta {
+  top: clamp(116px, 13vh, 138px);
+}
+
+@media (max-width: 920px) {
+  .m1-source-label,
+  .m1-source-meta {
+    top: clamp(156px, 20vh, 188px);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .m1-source-panel:hover .m1-source-media {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m1-source-media {
+    transform: none;
+    transition: opacity 200ms ease;
+  }
+}
+
+.m1-space-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(232, 232, 248, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(232, 232, 248, 0.025) 1px, transparent 1px),
+    #050713;
+  background-size: 100% 168px, 168px 100%, auto;
+}
+
+.m1-bg-orbit,
+.m1-bg-axis {
+  position: absolute;
+  display: block;
+  opacity: 0.34;
+}
+
+.m1-bg-orbit {
+  border: 1px solid rgba(232, 232, 248, 0.055);
+  border-radius: 50%;
+}
+
+.m1-bg-orbit.is-a {
+  top: 12vh;
+  left: 30vw;
+  width: 64vw;
+  height: 30vw;
+  transform: rotate(-8deg);
+}
+
+.m1-bg-orbit.is-b {
+  top: 92vh;
+  left: 28vw;
+  width: 70vw;
+  height: 34vw;
+  transform: rotate(10deg);
+}
+
+.m1-bg-orbit.is-c {
+  top: 202vh;
+  left: 36vw;
+  width: 60vw;
+  height: 60vw;
+  opacity: 0.22;
+}
+
+.m1-bg-axis {
+  height: 400vh;
+  width: 1px;
+  background: rgba(232, 232, 248, 0.07);
+  transform-origin: top center;
+}
+
+.m1-bg-axis.is-vertical {
+  top: 0;
+  left: 58vw;
+}
+
+.m1-bg-axis.is-diagonal {
+  top: 0;
+  left: 74vw;
+  transform: rotate(28deg);
+}
+
+.m1-bg-axis.is-diagonal-alt {
+  top: 0;
+  left: 48vw;
+  transform: rotate(-24deg);
+  opacity: 0.2;
+}
+
+.m1-earth-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.m1-earth-canvas {
+  position: absolute !important;
+  inset: 0;
+  z-index: 0;
+  width: 100% !important;
+  height: 100% !important;
+  background: transparent;
+}
+
+.m1-hero-copy {
+  --m1-hero-title-size: clamp(50px, 7.2vw, 78px);
+  --m1-hero-headline-size: clamp(30px, 3vw, 44px);
+  --m1-hero-sub-size: 18px;
+  --m1-hero-body-size: 13px;
+  position: absolute;
+  top: 13%;
+  left: 6%;
+  width: 44%;
+}
+
+.m1-hero-copy.is-en {
+  --m1-hero-title-size: clamp(40px, 4.6vw, 58px);
+  --m1-hero-headline-size: var(--m1-hero-title-size);
+  width: 48%;
+}
+
+.m1-hero-copy:not(.is-en) .sh-line2 {
+  opacity: 0.78;
+}
+
+@media (max-width: 820px) {
+  .m1-space-backdrop {
+    background-size: 100% 132px, 132px 100%, auto;
+  }
+
+  .m1-bg-orbit.is-a,
+  .m1-bg-orbit.is-b,
+  .m1-bg-orbit.is-c {
+    left: 10vw;
+    width: 118vw;
+    height: 70vw;
+  }
+
+  .m1-bg-axis.is-vertical {
+    left: 72vw;
+  }
+}
+
+@media (max-width: 560px) {
+  .m1-hero-copy {
+    --m1-hero-title-size: clamp(34px, 10vw, 44px);
+    --m1-hero-headline-size: clamp(14px, 4vw, 23px);
+    --m1-hero-sub-size: 14px;
+    --m1-hero-body-size: 11px;
+    top: 18%;
+    width: 58%;
+  }
+
+  .m1-hero-copy.is-en {
+    --m1-hero-title-size: clamp(23px, 6.5vw, 27px);
+    --m1-hero-sub-size: 13px;
+    width: 62%;
+  }
+
+  .m1-hero-copy.is-en .sh-line1,
+  .m1-hero-copy.is-en .sh-line2 {
+    white-space: nowrap;
+  }
+}

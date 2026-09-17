@@ -1,0 +1,96 @@
+{
+  "continue_context_example": {
+    "current_node": {
+      "node_id": "node_04",
+      "task_type": "STORY_CONTINUE",
+      "summary": "Use the immutable node_04 summary from the Outline.",
+      "entry_condition": "Use the immutable node_04 entry condition from the Outline."
+    },
+    "generation_source": {
+      "interaction_node_id": "node_04",
+      "interaction_snapshot": {
+        "question_id": "near_field_conjunction",
+        "answer_id": "avoidance_burn",
+        "effect_summary": "Use a controlled avoidance burn to reduce immediate conjunction risk."
+      }
+    },
+    "state_transition": {
+      "before": {
+        "event_integrity": 68,
+        "relationship_connection": 72,
+        "uncertainty": 46
+      },
+      "delta": {
+        "event_integrity": 7,
+        "relationship_connection": -4,
+        "uncertainty": 5
+      },
+      "after": {
+        "event_integrity": 75,
+        "relationship_connection": 68,
+        "uncertainty": 51
+      },
+      "active_consequences": [
+        {
+          "consequence_id": "time_window_compressed",
+          "description": "The remaining decision window is compressed."
+        }
+      ]
+    },
+    "previous_handoff": {
+      "current_situation": "The mission-selected stage has reached the first orbital incident.",
+      "unresolved_threads": [
+        "The primary anomaly remains unresolved."
+      ]
+    },
+    "story_context": {
+      "core_event": "Core event",
+      "irreplaceable_part": "Irreplaceable part",
+      "primary_anomaly": "WEATHER_UPDATE_DELAY"
+    },
+    "known_to_user": [
+      "Facts confirmed through the first orbital question."
+    ]
+  },
+  "ending_context_example": {
+    "current_node": {
+      "node_id": "node_05",
+      "task_type": "STORY_ENDING",
+      "summary": "Use the immutable node_05 summary from the Outline.",
+      "entry_condition": "All six orbital questions have been committed."
+    },
+    "selected_ending": {
+      "ending_id": "ending_02",
+      "outcome": "The core commitment is fulfilled, with an irreversible visible cost."
+    },
+    "previous_handoff": {
+      "current_situation": "node_04 has reached its validated continuity handoff.",
+      "unresolved_threads": [
+        "The ending must close the remaining central question."
+      ]
+    },
+    "story_context": {
+      "core_event": "Core event",
+      "user_expectation": "User expectation",
+      "irreplaceable_part": "Irreplaceable part",
+      "primary_anomaly": "WEATHER_UPDATE_DELAY"
+    },
+    "story_state": {
+      "event_integrity": 72,
+      "relationship_connection": 84,
+      "uncertainty": 39
+    },
+    "active_consequences": [
+      {
+        "consequence_id": "visible_irreplaceable_loss",
+        "description": "A visible and irreversible loss remains."
+      }
+    ],
+    "key_outcomes": [
+      "All six orbital answers contribute to the final accumulated outcome."
+    ],
+    "known_to_user": [
+      "Facts confirmed before the ending."
+    ]
+  }
+}
