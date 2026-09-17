@@ -13,7 +13,11 @@ npm install
 npm run dev
 ```
 
-Build: `npm run build`. Cloudflare Pages project: `space-debris-a` (create separately before deploying).
+Build: `npm run build`. Deploy: `npm run deploy` (requires Cloudflare login).
+
+Live site: https://space-debris-a.pages.dev
+
+Cloudflare Pages project: `space-debris-a`. This project uses direct uploads; GitHub pushes do not automatically deploy.
 
 ## React + Vite
 
