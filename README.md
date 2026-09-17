@@ -1,4 +1,21 @@
-# React + Vite
+# SPACE_DEBRIS_A
+
+Independent non-AI version of the space debris website for A/B testing.
+
+Repository: https://github.com/immora1/SPACE_DEBRIS_A
+
+This project is separate from SPACE_DEBRIES_NEW. Its Git remote and Cloudflare project name must point to A.
+
+## Development
+
+```sh
+npm install
+npm run dev
+```
+
+Build: `npm run build`. Cloudflare Pages project: `space-debris-a` (create separately before deploying).
+
+## React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
