@@ -8,7 +8,6 @@ import * as THREE from 'three'
 import useAppStore from '../../store/useAppStore'
 import useI18n from '../../i18n/useI18n'
 import { getMission } from '../../data/missions.js'
-import { calculateMaterialBuildMetrics } from '../../data/materials.js'
 import {
   evaluateResult,
   localizeThreatEvent,
@@ -57,8 +56,9 @@ const ORBIT_RADIUS_Y = 150
 const ORBIT_LEFT_X = ORBIT_CENTER_X - ORBIT_RADIUS_X
 const ORBIT_RIGHT_X = ORBIT_CENTER_X + ORBIT_RADIUS_X
 const ORBIT_FRONT_PATH = `M ${ORBIT_LEFT_X} ${ORBIT_CENTER_Y} A ${ORBIT_RADIUS_X} ${ORBIT_RADIUS_Y} 0 0 0 ${ORBIT_RIGHT_X} ${ORBIT_CENTER_Y}`
-const TOTAL_ROUNDS = 6
-const GAME_MONTHS = [1, 3, 5, 7, 9, 12]
+const DEMO_MATERIALS = Object.freeze({ frame: 'aluminum', solar: 'silicon', insulation: 'aluminized', propulsion: 'aluminum-tank' })
+const TOTAL_ROUNDS = 3
+const GAME_MONTHS = [1, 6, 12]
 const GAME_PHASE = {
   EVENT: 'event',
   FEEDBACK: 'feedback',
@@ -2056,6 +2056,7 @@ function GamePanel({
             <div className="m4-game-label">{THREAT_LABELS[event.type] || 'ORBITAL THREAT'} · THREAT DETECTED</div>
             <h2>{event.title}</h2>
             <p>{event.description}</p>
+            <p className="m4-game-label">{pick('教学模拟 · 三次决策 / 十二个月', 'TEACHING SIMULATION · THREE DECISIONS / TWELVE MONTHS')}</p>
             <div className="m4-game-reference">{event.realRef}</div>
             <div className="m4-game-options">
               {event.options.map((option, index) => (
@@ -2067,6 +2068,7 @@ function GamePanel({
                 >
                   <strong>{option.label}</strong>
                   <small>{option.subtext}</small>
+                  <small>{pick('燃料', 'FUEL')} {option.fuelDelta} · {pick('护甲', 'ARMOR')} {option.armorDelta} · {pick('进度', 'PROGRESS')} +{option.missionDelta}</small>
                   <span className="m4-game-option-index">{String.fromCharCode(65 + index)}</span>
                 </button>
               ))}
@@ -2094,7 +2096,7 @@ function GamePanel({
               <DeltaTag label="MISSION" value={feedback.missionDelta} />
             </div>
             <button className="m4-game-continue" onClick={onContinue}>
-              {round + 1 >= TOTAL_ROUNDS ? pick('查看任务结果', 'VIEW MISSION RESULT') : pick('进入下个月', 'CONTINUE TO NEXT MONTH')}
+              {round + 1 >= TOTAL_ROUNDS ? pick('查看任务结果', 'VIEW MISSION RESULT') : pick('进入下一阶段', 'CONTINUE TO NEXT STAGE')}
             </button>
           </MotionDiv>
         )}
@@ -3172,7 +3174,7 @@ function BreakupMaterialBoard({ recoveryStep, materials, materialProfiles, ancho
                 <strong>{language === 'en' ? `${card.itemCount} TYPES` : card.countLabel}</strong>
                 <span>{pick(card.label, card.labelEn)}</span>
               </h4>
-              <p>{pick(card.summary, 'Representative remnants from the selected materials after breakup and atmospheric heating.')}</p>
+              <p>{pick(card.summary, 'Representative remnants from the example satellite after breakup and atmospheric heating.')}</p>
               <div className="m4-material-card-note">{pick(`${card.materialDetail} · ${card.note}`, 'M3 MATERIAL PROFILE · RE-ENTRY RESIDUE')}</div>
             </article>
           ))}
@@ -4161,14 +4163,13 @@ export default function M4New({ onComplete = () => {} }) {
   const { language, pick } = useI18n()
   const {
     satellite,
-    materials,
     damageLevel,
     clickedHistoryEvents,
-    mission,
     setGameResult,
     setDebrisGenerated,
   } = useAppStore()
-  const selectedMission = getMission(mission)
+  const materials = DEMO_MATERIALS
+  const selectedMission = getMission('weather_monitoring')
   const missionEnvironment = useMemo(
     () => resolveMissionEnvironment(selectedMission, satellite),
     [selectedMission, satellite],
@@ -4265,18 +4266,18 @@ export default function M4New({ onComplete = () => {} }) {
       armor: finalStatus.armor,
       fuel: finalStatus.fuel,
       missionProgress: finalStatus.missionProgress,
-      totalRounds: TOTAL_ROUNDS,
+      disposalPlanned: allDecisions.some((decision) => decision.eventId === 'end_of_life' && decision.outcome !== 'wrong'),
     })
     const isSuccess = result === 'success'
-    const material = materials?.frame || '铝合金'
+    const material = pick('铝合金', 'Aluminum alloy')
 
     const generatedReflection = {
       knowledgePoints: language === 'en'
         ? ['Every avoidance maneuver consumes limited fuel.', 'Small debris can still cause irreversible damage.', 'End-of-life disposal capability must be reserved before the final maneuver.']
         : ['每一次轨道规避都会消耗有限燃料。', '小尺寸碎片仍可能造成不可逆损伤。', '任务末期处置能力必须在最后一次机动前预留。'],
       satFate: isSuccess
-        ? pick('卫星完成任务并保留了离轨能力。', 'The satellite completes its mission and retains deorbit capability.')
-        : pick('卫星失去控制，成为新的轨道碎片来源。', 'The satellite loses control and becomes a new source of orbital debris.'),
+        ? pick('卫星完成任务，并保留了后续退出工作轨道的资源。', 'The satellite completes its mission and reserves resources for leaving its operational orbit.')
+        : pick('任务未满足全部目标：资源储备不足、观测进度不足，或尚未落实末期处置计划。', 'The mission misses one or more goals: resource reserves, observation progress, or an end-of-life disposal plan.'),
       debrisDescription: pick(
         `${material}碎片，来源于受损卫星，残留于${missionEnvironment.orbitLabel}。`,
         `${material} fragments from the damaged satellite remain in ${missionEnvironment.orbitLabelEn}.`,
@@ -4295,7 +4296,6 @@ export default function M4New({ onComplete = () => {} }) {
     setReflection(generatedReflection)
     setPhase(GAME_PHASE.REFLECTION)
   }, [
-    materials,
     setDebrisGenerated,
     setGameResult,
     language,
@@ -4307,10 +4307,8 @@ export default function M4New({ onComplete = () => {} }) {
   useEffect(() => {
     if (gameStarted) return
     const base = resolveInitialGameStatus(null, damageLevel)
-    const allSelected = ['frame', 'solar', 'insulation', 'propulsion'].every((part) => materials?.[part])
-    const metrics = allSelected ? calculateMaterialBuildMetrics(materials, base) : base
-    setGameStatus({ ...base, armor: metrics.armor, fuel: metrics.fuel })
-  }, [damageLevel, gameStarted, materials])
+    setGameStatus(base)
+  }, [damageLevel, gameStarted])
 
   const handleChoose = useCallback((option) => {
     if (!currentEvent || phase !== GAME_PHASE.EVENT) return
@@ -4344,10 +4342,10 @@ export default function M4New({ onComplete = () => {} }) {
     setFeedback({
       ...option,
       title: option.outcome === 'correct'
-        ? pick('机动执行完成', 'Maneuver complete')
+        ? pick('处置方案已执行', 'Response carried out')
         : option.outcome === 'partial'
           ? pick('风险仍未完全解除', 'Risk remains')
-          : pick('轨道状态继续恶化', 'Orbit continues to degrade'),
+          : pick('任务留下未解决的风险', 'Mission risks remain unresolved'),
       color: feedbackColor,
       nextDecisions,
       nextStatus,

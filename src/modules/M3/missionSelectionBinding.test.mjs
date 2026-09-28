@@ -26,11 +26,13 @@ test('mission copy is bilingual and every card exposes the same required fields'
   }
 })
 
-test('mission selection heading removes internal product wording', () => {
-  assert.match(deckSource, /03 · 任务选择/)
-  assert.match(deckSource, /03 · MISSION SELECTION/)
+test('mission introduction has no selection or assignment controls', () => {
+  assert.match(deckSource, /03 · 卫星任务/)
+  assert.match(deckSource, /03 · SATELLITE MISSIONS/)
   assert.match(deckSource, /每颗卫星都有自己的任务，而任务决定它需要去哪里、如何运行。/)
   assert.match(deckSource, /Every satellite is built for a specific purpose/)
+  assert.doesNotMatch(deckSource, /onConfirm|selectedMissionId|drag=/)
+  assert.match(deckSource, /missions\.map/)
   assert.doesNotMatch(deckSource, /M4 游戏/)
   assert.doesNotMatch(deckSource, /second consequential choice/i)
   assert.doesNotMatch(deckSource, /第二个有后果的选择/)
@@ -48,3 +50,11 @@ test('mission card renders objective operation orbit altitude examples and effec
   }
 })
 
+
+test('mission tabs browse one introduction without assigning a mission', () => {
+  assert.match(deckSource, /role="tablist"/)
+  assert.match(deckSource, /hidden=\{activeIndex !== index\}/)
+  assert.match(deckSource, /aria-controls/)
+  assert.match(deckSource, /ArrowRight/)
+  assert.doesNotMatch(deckSource, /setMission|onConfirm/)
+})

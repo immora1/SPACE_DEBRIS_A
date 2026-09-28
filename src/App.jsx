@@ -102,8 +102,8 @@ function OptionalModuleCard({ Component, isVisible, onDecision }) {
               </div>
               <div className="optional-module-description">
                 {pick(
-                  '学会区分太空垃圾再入、流星与卫星，并浏览观测样本。',
-                  'Learn to distinguish debris re-entry, meteors, and satellites, then explore observation samples.',
+                  '学会区分太空垃圾再入、流星与卫星，完成分类练习。',
+                  'Learn to distinguish debris re-entry, meteors, and satellites through classification practice.',
                 )}
               </div>
             </div>
@@ -141,7 +141,7 @@ function OptionalModuleCard({ Component, isVisible, onDecision }) {
             </button>
           </div>
           <Suspense fallback={<ModuleLoader />}>
-            {createElement(Component, { onComplete: () => {} })}
+            {createElement(Component)}
           </Suspense>
         </div>
       )}

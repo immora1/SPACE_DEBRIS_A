@@ -171,18 +171,14 @@ export default function M3({ onComplete }) {
     ? '"PingFang SC", "Microsoft YaHei", sans-serif'
     : '"Lexend", sans-serif'
   const satellite       = useAppStore((s) => s.satellite)
-  const materials       = useAppStore((s) => s.materials)
-  const mission = useAppStore((s) => s.mission)
-  const setMission = useAppStore((s) => s.setMission)
-  const setMaterialPart = useAppStore((s) => s.setMaterialPart)
   const [currentStep, setCurrentStep] = useState(0)
   const [activeOrbit, setActiveOrbit] = useState('leo')
   const [pinnedOrbit, setPinnedOrbit] = useState('leo')
   const onCompleteRef = useRef(onComplete)
   useEffect(() => { onCompleteRef.current = onComplete }, [onComplete])
   useEffect(() => {
-    if (mission) onCompleteRef.current?.({ autoScroll: false })
-  }, [mission])
+    if (currentStep === 2) onCompleteRef.current?.({ autoScroll: false })
+  }, [currentStep])
 
   useEffect(() => {
     setActiveOrbit(currentStep === 0 ? pinnedOrbit : null)
@@ -284,11 +280,6 @@ export default function M3({ onComplete }) {
     }
   }, [])
 
-  const safeMatls  = materials ?? {}
-  const matAllDone = Object.values(safeMatls).filter(Boolean).length === 4
-  function handleMissionSelect(missionId) {
-    setMission(missionId)
-  }
 
   // 章节容器通用样式
   const chapterWrap = (step) => ({
@@ -432,26 +423,18 @@ export default function M3({ onComplete }) {
           </div>
 
           {/* ═══════════════════════════════════════════════
-              {pick('章节 2 · 材料选择 · MATERIAL SELECTION', 'CHAPTER 2 · MATERIAL SELECTION')}
+              {pick('章节 2 · 材料介绍 · SATELLITE MATERIALS', 'CHAPTER 2 · SATELLITE MATERIALS')}
           ═══════════════════════════════════════════════ */}
           <div ref={chapterRef2} style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '80px 28px' }}>
-            <MaterialSelectionLab
-              materials={safeMatls}
-              allDone={matAllDone}
-              onSelect={setMaterialPart}
-              onContinue={() => chapterRef3.current?.scrollIntoView({ behavior: 'smooth' })}
-            />
+            <MaterialSelectionLab />
           </div>
 
           {/* ═══════════════════════════════════════════════
-              {pick('章节 3 · 任务指派', 'CHAPTER 3 · MISSION ASSIGNMENT')}
+              {pick('章节 3 · 卫星任务', 'CHAPTER 3 · SATELLITE MISSIONS')}
           ═══════════════════════════════════════════════ */}
           <div ref={chapterRef3} style={chapterWrap(2)}>
             <MissionSelectionDeck
               missions={MISSIONS}
-              selectedMissionId={mission}
-              satelliteName={satellite?.name}
-              onConfirm={handleMissionSelect}
             />
           </div>
 
@@ -488,7 +471,6 @@ export default function M3({ onComplete }) {
               height={420}
               activeOrbit={activeOrbit}
               currentStep={currentStep}
-              mission={mission}
             />
           </div>
 

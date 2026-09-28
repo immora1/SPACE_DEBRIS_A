@@ -20,11 +20,11 @@ test('all material combinations produce bounded local game metrics without a ser
   }
 })
 
-test('each mission supplies six playable local events and an evaluable result', () => {
+test('each mission supplies three playable local events and an evaluable result', () => {
   for (const mission of MISSION_OPTIONS) {
     assert.equal(resolveMissionEnvironment(mission).missionId, mission.mission_id)
-    const events = pickEvents(0, [], 6, mission)
-    assert.equal(events.length, 6)
+    const events = pickEvents(0, [], 3, mission)
+    assert.equal(events.length, 3)
     let status = resolveInitialGameStatus(null, 0)
     for (const event of events) {
       const option = event.options.find((item) => item.outcome === 'correct')
@@ -33,7 +33,7 @@ test('each mission supplies six playable local events and an evaluable result', 
         status[metric] = Math.max(0, Math.min(100, status[metric] + (option[delta] || 0)))
       }
     }
-    assert.ok(['success', 'failure'].includes(evaluateResult({ ...status, totalRounds: 6 })))
+    assert.equal(evaluateResult({ ...status, disposalPlanned: true }), 'success')
   }
 })
 

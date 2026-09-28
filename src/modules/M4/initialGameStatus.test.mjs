@@ -14,10 +14,8 @@ test('M4 initial status accepts explicit local metrics when available', () => {
     ),
     { fuel: 95, armor: 81, missionProgress: 0 },
   )
-  assert.match(
-    source,
-    /calculateMaterialBuildMetrics\(materials, base\)/,
-  )
+  assert.doesNotMatch(source, /calculateMaterialBuildMetrics/)
+  assert.match(source, /setGameStatus\(base\)/)
 })
 
 test('M4 initial status preserves the existing damage-based fallback', () => {

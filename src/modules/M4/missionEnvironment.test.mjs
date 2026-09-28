@@ -41,14 +41,11 @@ test('M4 retains a safe satellite-derived fallback for legacy stories without mi
   assert.equal(environment.inclinationDeg, 98.7)
 })
 
-test('mission orbit profile changes the order of M4 environment events', () => {
-  const leoEvents = pickEvents(0, [], 6, publicMission('weather_monitoring'))
-  const geoEvents = pickEvents(0, [], 6, publicMission('communications_relay'))
-
-  assert.notDeepEqual(
-    geoEvents.map((event) => event.id),
-    leoEvents.map((event) => event.id),
-  )
-  assert.equal(geoEvents[0].id, 'solar_flare')
-  assert.equal(leoEvents[0].id, 'debris_close')
+test('three stages retain narrative order and adapt disposal to the mission orbit', () => {
+  const leoEvents = pickEvents(0, [], 3, publicMission('weather_monitoring'))
+  const geoEvents = pickEvents(40, ['风云一号 C 反卫测试'], 3, publicMission('communications_relay'))
+  assert.deepEqual(leoEvents.map((event) => event.id), ['debris_close', 'cascade_fragment', 'end_of_life'])
+  assert.deepEqual(geoEvents.map((event) => event.id), leoEvents.map((event) => event.id))
+  assert.match(leoEvents[2].realRef, /低轨/)
+  assert.match(geoEvents[2].realRef, /弃置轨道/)
 })
